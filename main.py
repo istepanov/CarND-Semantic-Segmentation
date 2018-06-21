@@ -2,6 +2,7 @@ import os.path
 import tensorflow as tf
 import helper
 import warnings
+import pathlib
 from distutils.version import LooseVersion
 import project_tests as tests
 
@@ -23,6 +24,8 @@ EPOCHS = 40
 BATCH_SIZE = 16
 DROPOUT = 0.75
 LEARNING_RATE = 0.001
+CHECKPOINT_FOLDER = './checkpoint'
+CHECKPOINT_PREFIX = os.path.join(CHECKPOINT_FOLDER, 'model.ckpt')
 
 
 def load_vgg(sess, vgg_path):
@@ -215,18 +218,25 @@ def run():
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
 
-        print("Model build successful, starting training")
-
-        # Train the neural network
-        train_nn(
-            sess, EPOCHS, BATCH_SIZE, get_batches_fn,
-            train_op, cross_entropy_loss, image_input,
-            correct_label, keep_prob, learning_rate
-        )
-
         saver = tf.train.Saver()
-        save_path = saver.save(sess, "./checkpoint/model.ckpt")
-        print("Model saved in path: {}".format(save_path))
+
+        if os.path.isdir(CHECKPOINT_FOLDER) and tf.train.checkpoint_exists(CHECKPOINT_PREFIX):
+            saver.restore(sess, CHECKPOINT_PREFIX)
+            print('Model restored, no training needed')
+        else:
+            print("Model build successful, starting training")
+
+            # Train the neural network
+            train_nn(
+                sess, EPOCHS, BATCH_SIZE, get_batches_fn,
+                train_op, cross_entropy_loss, image_input,
+                correct_label, keep_prob, learning_rate
+            )
+
+            pathlib.Path(CHECKPOINT_FOLDER).mkdir(parents=True, exist_ok=True)
+            save_path = saver.save(sess, CHECKPOINT_PREFIX)
+
+            print("Model saved in path: {}".format(save_path))
 
         # Run the model with the test images and save each painted output image (roads painted green)
         helper.save_inference_samples(runs_dir, data_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
