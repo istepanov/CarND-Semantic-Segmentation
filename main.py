@@ -176,8 +176,6 @@ tests.test_train_nn(train_nn)
 
 
 def run():
-    num_classes = 2
-    image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
@@ -190,7 +188,7 @@ def run():
     #  https://www.cityscapes-dataset.com/
 
     # Create function to get batches
-    get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
+    get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), IMAGE_SHAPE)
 
     # Path to vgg model
     vgg_path = os.path.join(data_dir, 'vgg')
@@ -201,7 +199,7 @@ def run():
         image_input, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
 
         # The resulting network architecture from adding a decoder on top of the given vgg model
-        model_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
+        model_output = layers(layer3_out, layer4_out, layer7_out, NUM_CLASSES)
 
         # placeholders
         correct_label = tf.placeholder(tf.float32, [None, IMAGE_SHAPE[0], IMAGE_SHAPE[1], NUM_CLASSES])
@@ -226,8 +224,12 @@ def run():
             correct_label, keep_prob, learning_rate
         )
 
+        saver = tf.train.Saver()
+        save_path = saver.save(sess, "./checkpoint/model.ckpt")
+        print("Model saved in path: {}".format(save_path))
+
         # Run the model with the test images and save each painted output image (roads painted green)
-        helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, image_input)
+        helper.save_inference_samples(runs_dir, data_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
 
         print("All done!")
 
