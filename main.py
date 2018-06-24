@@ -3,6 +3,7 @@ import tensorflow as tf
 import helper
 import warnings
 import pathlib
+import argparse
 from distutils.version import LooseVersion
 import project_tests as tests
 
@@ -179,6 +180,11 @@ tests.test_train_nn(train_nn)
 
 
 def run():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--restore', type=str, nargs='?', help='Restore from a checkpoint')
+    parser.add_argument('--video', type=str, nargs='?', help='Run segmentation on a video')
+    args = parser.parse_args()
+
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
@@ -220,12 +226,10 @@ def run():
 
         saver = tf.train.Saver()
 
-        if os.path.isdir(CHECKPOINT_FOLDER) and tf.train.checkpoint_exists(CHECKPOINT_PREFIX):
-            saver.restore(sess, CHECKPOINT_PREFIX)
-            print('Model restored, no training needed')
+        if args.restore:
+            saver.restore(sess, args.restore)
+            print('Model restored from {0}'.format(args.restore))
         else:
-            print("Model build successful, starting training")
-
             # Train the neural network
             train_nn(
                 sess, EPOCHS, BATCH_SIZE, get_batches_fn,
@@ -238,12 +242,21 @@ def run():
 
             print("Model saved in path: {}".format(save_path))
 
-        # Run the model with the test images and save each painted output image (roads painted green)
-        helper.save_inference_samples(runs_dir, data_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
+        if args.video:
+            from moviepy.editor import VideoFileClip
+
+            def process_image(image):
+                return helper.process_image(sess, logits, keep_prob, image_input, image, IMAGE_SHAPE)
+
+            clip = VideoFileClip(args.video)
+            white_clip = clip.fl_image(process_image)
+            output_file = "{0}_{2}.{1}".format(*args.video.rsplit('.', 1) + ['output'])
+            white_clip.write_videofile(output_file, audio=False)
+        else:
+            # Run the model with the test images and save each painted output image (roads painted green)
+            helper.save_inference_samples(runs_dir, data_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
 
         print("All done!")
-
-        # OPTIONAL: Apply the trained model to a video
 
 
 if __name__ == '__main__':
