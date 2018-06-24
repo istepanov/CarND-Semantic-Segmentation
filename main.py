@@ -171,7 +171,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
             total_loss += loss;
 
-        print("EPOCH {} ...".format(epoch + 1))
+        print("EPOCH {}/{} ...".format(epoch + 1, EPOCHS))
         print("Loss = {:.3f}".format(total_loss))
         print()
 
@@ -242,10 +242,6 @@ def run():
         helper.save_inference_samples(runs_dir, data_dir, sess, IMAGE_SHAPE, logits, keep_prob, image_input)
 
         print("All done!")
-
-
-        # OPTIONAL: Augment Images for better results
-        #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # OPTIONAL: Apply the trained model to a video
 

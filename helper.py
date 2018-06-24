@@ -10,6 +10,8 @@ import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
+import imgaug as ia
+from imgaug import augmenters as iaa
 
 
 class DLProgress(tqdm):
@@ -77,6 +79,29 @@ def gen_batch_function(data_folder, image_shape):
             for path in glob(os.path.join(data_folder, 'gt_image_2', '*_road_*.png'))}
         background_color = np.array([255, 0, 0])
 
+        # Data augmentation
+        seq = iaa.Sequential(
+            [
+                # Strengthen or weaken the contrast in each image.
+                iaa.ContrastNormalization((0.75, 1.5)),
+                # Add gaussian noise.
+                # For 50% of all images, we sample the noise once per pixel.
+                # For the other 50% of all images, we sample the noise per pixel AND
+                # channel. This can change the color (not only brightness) of the
+                # pixels.
+                iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255), per_channel=0.5),
+                # Make some images brighter and some darker.
+                # In 20% of all cases, we sample the multiplier once per channel,
+                # which can end up changing the color of the images.
+                iaa.Multiply((0.8, 1.2), per_channel=0.2),
+                # Drop 2% of all pixels by converting them to black pixels,
+                # but do that on a lower-resolution version of the image
+                # that has 50% of the original size
+                iaa.CoarseDropout(0.02, size_percent=0.5),
+            ],
+            random_order=True    # apply augmenters in random order
+        ) 
+
         random.shuffle(image_paths)
         for batch_i in range(0, len(image_paths), batch_size):
             images = []
@@ -93,6 +118,8 @@ def gen_batch_function(data_folder, image_shape):
 
                 images.append(image)
                 gt_images.append(gt_image)
+
+            images = seq.augment_images(images)
 
             yield np.array(images), np.array(gt_images)
     return get_batches_fn
