@@ -21,9 +21,9 @@ else:
 
 NUM_CLASSES = 2
 IMAGE_SHAPE = (160, 576)
-EPOCHS = 40
+EPOCHS = 50
 BATCH_SIZE = 16
-DROPOUT = 0.75
+DROPOUT = 0.5
 LEARNING_RATE = 0.001
 CHECKPOINT_FOLDER = './checkpoint'
 CHECKPOINT_PREFIX = os.path.join(CHECKPOINT_FOLDER, 'model.ckpt')
@@ -181,6 +181,7 @@ tests.test_train_nn(train_nn)
 
 def run():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--train', action='store_true', help='Run the training')
     parser.add_argument('--restore', type=str, nargs='?', help='Restore from a checkpoint')
     parser.add_argument('--video', type=str, nargs='?', help='Run segmentation on a video')
     args = parser.parse_args()
@@ -229,7 +230,8 @@ def run():
         if args.restore:
             saver.restore(sess, args.restore)
             print('Model restored from {0}'.format(args.restore))
-        else:
+        
+        if args.train:
             # Train the neural network
             train_nn(
                 sess, EPOCHS, BATCH_SIZE, get_batches_fn,

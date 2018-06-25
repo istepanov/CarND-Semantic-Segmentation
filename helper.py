@@ -67,6 +67,70 @@ def gen_batch_function(data_folder, image_shape):
     :param image_shape: Tuple - Shape of image
     :return:
     """
+    sometimes = lambda aug: iaa.Sometimes(0.5, aug)
+
+    # apply to images
+    seq_images = iaa.Sequential(
+        [
+            # Change the colorspace from RGB to HSV, then add 0-100 to the first channel (hue),
+            # then convert back to RGB.
+            iaa.Sequential([
+                iaa.ChangeColorspace(from_colorspace="RGB", to_colorspace="HSV"),
+                iaa.WithChannels(0, iaa.Add((0, 100))),
+                iaa.ChangeColorspace(from_colorspace="HSV", to_colorspace="RGB")
+            ]),
+            # Strengthen or weaken the contrast in each image.
+            iaa.ContrastNormalization((0.75, 1.5)),
+            # Multiply 50% of all images with a random value between 0.5 and 2.0
+            # and multiply the remaining 50% channel-wise.
+            iaa.Multiply((0.5, 2.0), per_channel=0.5),
+            # Sometimes blur image using a mean over neihbourhoods that have a random size between 1x1 and 5x5,
+            # or sharpen an image, then overlay the results with the original using an alpha between 0.0 and 1.0.
+            sometimes(
+                iaa.OneOf([
+                    iaa.AverageBlur(k=(1, 5)),
+                    iaa.Sharpen(alpha=(0.0, 1.0), lightness=(0.75, 2.0)),
+                ])
+            ),
+            # Add gaussian noise.
+            # For 50% of all images, we sample the noise once per pixel.
+            # For the other 50% of all images, we sample the noise per pixel AND
+            # channel. This can change the color (not only brightness) of the
+            # pixels.
+            iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255), per_channel=0.5),
+            # Sometimes drop 2% of all pixels by converting them to black pixels,
+            # but do that on a lower-resolution version of the image
+            # that has 50% of the original size
+            sometimes(
+                iaa.CoarseDropout(0.02, size_percent=0.5)
+            ),
+            # Sometimes sample per image a value p from the range 0<=p<=0.2
+            # and then drop p percent of all pixels in the image
+            sometimes(
+                iaa.Dropout(p=(0, 0.2))
+            ),
+        ],
+        random_order=True    # apply augmenters in random order
+    )
+
+    # apply to both images and labels
+    seq_images_labels = iaa.Sequential([
+        # horizontally flip 50% of all images
+        iaa.Fliplr(0.5),
+        sometimes(
+            iaa.OneOf([
+                iaa.Affine(
+                    scale={'x': (0.5, 2.0), 'y': (0.5, 2.0)},
+                    rotate=(-15, 15),
+                    shear=(-16, 16),
+                    translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
+                    mode='constant',
+                ),
+                iaa.PiecewiseAffine(scale=(0.01, 0.05))
+            ])
+        ),
+    ], random_order=False) 
+
     def get_batches_fn(batch_size):
         """
         Create batches of training data
@@ -78,29 +142,6 @@ def gen_batch_function(data_folder, image_shape):
             re.sub(r'_(lane|road)_', '_', os.path.basename(path)): path
             for path in glob(os.path.join(data_folder, 'gt_image_2', '*_road_*.png'))}
         background_color = np.array([255, 0, 0])
-
-        # Data augmentation
-        seq = iaa.Sequential(
-            [
-                # Strengthen or weaken the contrast in each image.
-                iaa.ContrastNormalization((0.75, 1.5)),
-                # Add gaussian noise.
-                # For 50% of all images, we sample the noise once per pixel.
-                # For the other 50% of all images, we sample the noise per pixel AND
-                # channel. This can change the color (not only brightness) of the
-                # pixels.
-                iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05*255), per_channel=0.5),
-                # Make some images brighter and some darker.
-                # In 20% of all cases, we sample the multiplier once per channel,
-                # which can end up changing the color of the images.
-                iaa.Multiply((0.8, 1.2), per_channel=0.2),
-                # Drop 2% of all pixels by converting them to black pixels,
-                # but do that on a lower-resolution version of the image
-                # that has 50% of the original size
-                iaa.CoarseDropout(0.02, size_percent=0.5),
-            ],
-            random_order=True    # apply augmenters in random order
-        ) 
 
         random.shuffle(image_paths)
         for batch_i in range(0, len(image_paths), batch_size):
@@ -119,7 +160,13 @@ def gen_batch_function(data_folder, image_shape):
                 images.append(image)
                 gt_images.append(gt_image)
 
-            images = seq.augment_images(images)
+            # these augmentations won't affect labels
+            images_aug = seq_images.augment_images(images)
+
+            # make sure we apply same augmentation for both images and labels
+            seq_images_labels_deterministic = seq_images_labels.to_deterministic()
+            images_aug = seq_images_labels_deterministic.augment_images(images_aug)
+            gt_images_aug = seq_images_labels_deterministic.augment_images(gt_images)
 
             yield np.array(images), np.array(gt_images)
     return get_batches_fn
